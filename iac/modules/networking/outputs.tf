@@ -1,0 +1,9 @@
+output "network_id" { value = google_compute_network.sre_agent.id }
+output "network_name" { value = google_compute_network.sre_agent.name }
+output "subnetwork_id" { value = google_compute_subnetwork.sre_agent.id }
+output "subnetwork_name" { value = google_compute_subnetwork.sre_agent.name }
+output "subnetwork_cidr" { value = google_compute_subnetwork.sre_agent.ip_cidr_range }
+output "pods_cidr" { value = "10.1.0.0/16" }
+output "services_cidr" { value = "10.2.0.0/20" }
+output "nat_name" { value = google_compute_router_nat.sre_agent.name }
+output "router_name" { value = google_compute_router.sre_agent.name }

@@ -1,0 +1,7 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored because it contains your billing account ID.
+
+project_id      = "YOUR-GCP-PROJECT-ID"       # e.g. "my-sre-agent-prod"
+billing_account = "XXXXXX-XXXXXX-XXXXXX"       # GCP billing account ID
+region          = "us-central1"
+zone            = "us-central1-a"
