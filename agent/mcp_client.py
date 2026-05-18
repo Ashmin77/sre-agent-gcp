@@ -75,7 +75,7 @@ MCP_REGISTRY = {
 # ── Cluster Registry ──────────────────────────────────────────────
 CLUSTER_REGISTRY = {
     os.environ.get("CLUSTER_1_NAME", "sre-test-cluster"): {
-        "project":        os.environ.get("PROJECT_ID",       "sreagent-demo"),
+        "project":        os.environ.get("PROJECT_ID",       "your-gcp-project-id"),
         "region":         os.environ.get("CLUSTER_1_REGION", "us-central1"),
         "mcp_primary":    "gke_remote_mcp",
         "mcp_fallback":   "k8s_mcp",
@@ -83,7 +83,7 @@ CLUSTER_REGISTRY = {
         "incident_types": ["ImagePullBackOff"],
     },
     os.environ.get("CLUSTER_2_NAME", "sre-test-cluster-2"): {
-        "project":        os.environ.get("PROJECT_ID_2",      "sreagent-demo-2"),
+        "project":        os.environ.get("PROJECT_ID_2",      "your-gcp-project-id-2"),
         "region":         os.environ.get("CLUSTER_2_REGION",  "us-east1"),
         "mcp_primary":    "gke_remote_mcp",
         "mcp_fallback":   "k8s_mcp",
@@ -253,7 +253,7 @@ def call_tool(
 
     if is_gke_remote:
         url     = source_config.get("url", "https://container.googleapis.com/mcp/read-only")
-        project = cluster_info.get("project", os.environ.get("PROJECT_ID", "sreagent-demo"))
+        project = cluster_info.get("project", os.environ.get("PROJECT_ID", "your-gcp-project-id"))
         region  = cluster_info.get("region",  os.environ.get("CLUSTER_1_REGION", "us-central1"))
         parent  = _build_parent(project, region, cluster_name)
 

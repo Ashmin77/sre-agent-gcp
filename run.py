@@ -15,11 +15,11 @@ Usage:
       --namespace test-incidents --pod crashloop-pod
 
 Environment variables required (set in agent/.env):
-  PROJECT_ID        sreagent-demo
+  PROJECT_ID        your-gcp-project-id
   REGION            us-central1
   GEMINI_MODEL      gemini-2.5-flash
-  K8S_MCP_URL       https://sre-k8s-mcp-zkqho3aiuq-uc.a.run.app
-  EVIDENCE_BUCKET   sreagent-demo-evidence
+  K8S_MCP_URL       https://sre-k8s-mcp-<hash>.<region>.run.app  (from: terraform output -raw custom_mcp_url)
+  EVIDENCE_BUCKET   your-gcp-project-id-evidence                      (from: terraform output -raw evidence_bucket_name)
 """
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def _print_report(result: dict, duration: float) -> None:
     evidence_ids    = result.get("evidence_ids", [])
     tokens_total    = inv.get("tokens_total", 0)
     cost_usd        = inv.get("estimated_cost_usd", 0.0)
-    evidence_bucket = os.environ.get("EVIDENCE_BUCKET", "sreagent-demo-evidence")
+    evidence_bucket = os.environ.get("EVIDENCE_BUCKET", "your-gcp-project-id-evidence")
     gcs_path        = f"gs://{evidence_bucket}/{run_id}/"
 
     print("\n" + "=" * 72)

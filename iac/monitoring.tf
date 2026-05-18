@@ -1,6 +1,6 @@
 # ── LOG-BASED METRICS ────────────────────────────────────────────
-# These metrics are derived from structured JSON logs written by the agent.
-# All three filters match fields the agent logs on every run.
+# Derived from structured JSON logs emitted by the agent on every run.
+# Visible in Cloud Monitoring under Metrics Explorer as logging/user/<name>.
 
 resource "google_logging_metric" "agent_invocations" {
   name    = "sre_agent/invocations"
@@ -8,8 +8,8 @@ resource "google_logging_metric" "agent_invocations" {
   filter  = "jsonPayload.run_id:*"
 
   metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
     display_name = "SRE Agent Invocations"
   }
 
@@ -22,8 +22,8 @@ resource "google_logging_metric" "agent_errors" {
   filter  = "jsonPayload.status=\"error\""
 
   metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
     display_name = "SRE Agent Errors"
   }
 
@@ -36,8 +36,8 @@ resource "google_logging_metric" "agent_escalations" {
   filter  = "jsonPayload.confidence_band=\"escalate\""
 
   metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
     display_name = "SRE Agent Escalation Events"
   }
 
@@ -45,8 +45,9 @@ resource "google_logging_metric" "agent_escalations" {
 }
 
 # ── ALERT POLICIES ───────────────────────────────────────────────
-# notification_channels is empty by default — add your team's
-# channel IDs here or wire them in via a variable after Phase 0.
+# notification_channels is empty by default.
+# Add your team's channel resource IDs after Phase 0:
+#   https://console.cloud.google.com/monitoring/alerting/notifications
 
 resource "google_monitoring_alert_policy" "agent_high_error_rate" {
   project      = google_project.sre_agent.project_id
@@ -57,9 +58,9 @@ resource "google_monitoring_alert_policy" "agent_high_error_rate" {
     display_name = "Agent errors > 5 in 5 minutes"
 
     condition_threshold {
-      filter     = "metric.type=\"logging.googleapis.com/user/sre_agent/errors\" AND resource.type=\"global\""
-      duration   = "300s"
-      comparison = "COMPARISON_GT"
+      filter          = "metric.type=\"logging.googleapis.com/user/sre_agent/errors\" AND resource.type=\"global\""
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
       threshold_value = 5
 
       aggregations {
@@ -88,9 +89,9 @@ resource "google_monitoring_alert_policy" "agent_high_escalation_rate" {
     display_name = "Escalations > 3 in 5 minutes"
 
     condition_threshold {
-      filter     = "metric.type=\"logging.googleapis.com/user/sre_agent/escalations\" AND resource.type=\"global\""
-      duration   = "300s"
-      comparison = "COMPARISON_GT"
+      filter          = "metric.type=\"logging.googleapis.com/user/sre_agent/escalations\" AND resource.type=\"global\""
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
       threshold_value = 3
 
       aggregations {

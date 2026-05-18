@@ -1,6 +1,6 @@
 # GCP SRE Agent
 
-An AI-powered Site Reliability Engineering co-pilot that autonomously investigates Kubernetes incidents on GCP. Given an incident description, the agent collects evidence from your GKE cluster via MCP tools, builds a structured root-cause analysis, and writes all evidence to GCS — without human intervention.
+An AI-powered Site Reliability Engineering co-pilot that autonomously investigates Kubernetes incidents on GCP. Given an incident description, the agent collects evidence from GKE clusters via MCP tools, builds a structured root-cause analysis, and writes all evidence to GCS — without human intervention.
 
 Built with [LangGraph](https://langchain-ai.github.io/langgraph/) and deployed to [Vertex AI Agent Engine](https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/overview). Infrastructure is fully managed with Terraform.
 
@@ -55,11 +55,11 @@ Incident query (string)
 
 ### Supported incident types
 
-| Incident | Example query |
-|---|---|
-| `OOMKilled` | `"oomkilled-pod keeps getting OOMKilled"` |
-| `ImagePullBackOff` | `"imagepull-pod is in ImagePullBackOff"` |
-| `CrashLoopBackOff` | `"crashloop-pod is in CrashLoopBackOff"` |
+| Incident           | Example query                             |
+| ------------------ | ----------------------------------------- |
+| `OOMKilled`        | `"oomkilled-pod keeps getting OOMKilled"` |
+| `ImagePullBackOff` | `"imagepull-pod is in ImagePullBackOff"`  |
+| `CrashLoopBackOff` | `"crashloop-pod is in CrashLoopBackOff"`  |
 
 ---
 
@@ -129,13 +129,13 @@ sre-agent-gcp/
 
 ## Prerequisites
 
-| Tool | Minimum version | Install |
-|---|---|---|
-| `gcloud` CLI | Latest | [cloud.google.com/sdk](https://cloud.google.com/sdk/docs/install) |
-| `terraform` | 1.6+ | [developer.hashicorp.com/terraform](https://developer.hashicorp.com/terraform/install) |
-| `kubectl` | Any | `gcloud components install kubectl` |
-| `docker` | Any | Required only for building the MCP container |
-| Python | 3.11+ | [python.org](https://www.python.org/downloads/) |
+| Tool         | Minimum version | Install                                                                                |
+| ------------ | --------------- | -------------------------------------------------------------------------------------- |
+| `gcloud` CLI | Latest          | [cloud.google.com/sdk](https://cloud.google.com/sdk/docs/install)                      |
+| `terraform`  | 1.6+            | [developer.hashicorp.com/terraform](https://developer.hashicorp.com/terraform/install) |
+| `kubectl`    | Any             | `gcloud components install kubectl`                                                    |
+| `docker`     | Any             | Required only for building the MCP container                                           |
+| Python       | 3.11+           | [python.org](https://www.python.org/downloads/)                                        |
 
 **GCP requirements:**
 
@@ -146,6 +146,9 @@ sre-agent-gcp/
 ---
 
 ## Step-by-step deployment
+
+> **Only one file requires manual edits before you start: `iac/terraform.tfvars`.**
+> Everything else — MCP URLs, bucket names, service account emails — is derived automatically.
 
 ### 1. Authenticate to GCP
 
@@ -161,139 +164,77 @@ git clone https://github.com/Ashmin77/sre-agent-gcp.git
 cd sre-agent-gcp
 ```
 
-### 3. Configure Terraform variables
+### 3. Fill in your project details — the only manual config step
 
 ```bash
 cp iac/terraform.tfvars.example iac/terraform.tfvars
 ```
 
-Edit `iac/terraform.tfvars`:
+Open `iac/terraform.tfvars` and set the two required values:
 
 ```hcl
-project_id      = "your-gcp-project-id"
-billing_account = "XXXXXX-XXXXXX-XXXXXX"
-region          = "us-central1"
-zone            = "us-central1-a"
+project_id      = "YOUR_GCP_PROJECT_ID"      # globally unique, e.g. "acme-sre-agent-prod"
+billing_account = "XXXXXX-XXXXXX-XXXXXX"     # find with: gcloud billing accounts list
+region          = "us-central1"              # optional — change if needed
+zone            = "us-central1-a"            # optional — must match region
 ```
 
-Find your billing account ID:
+That is the only file you ever need to edit. All downstream values (bucket names, service account email, Cloud Run URL) are derived from these two fields by Terraform.
+
+### 4. Deploy infrastructure
 
 ```bash
-gcloud billing accounts list
+terraform -chdir=iac init
+terraform -chdir=iac plan
+terraform -chdir=iac apply
 ```
 
-### 4. Apply Terraform
-
-```bash
-cd iac
-terraform init
-terraform plan
-terraform apply
-cd ..
-```
-
-This creates:
+Terraform creates:
 - VPC, subnet, Cloud NAT
 - GKE Autopilot cluster (`sre-test-cluster`)
 - Service account (`sre-agent-sa`) with least-privilege IAM roles
 - Artifact Registry repository for the MCP container image
-- Cloud Run service skeleton (`sre-k8s-mcp`) — needs the container built in step 5
-- GCS evidence bucket (`<project-id>-evidence`)
-- GCS staging bucket (`<project-id>-staging`) for Agent Engine artifacts
+- Cloud Run MCP service (`sre-k8s-mcp`) — needs the container image built in step 5
+- GCS evidence bucket (`YOUR_GCP_PROJECT_ID-evidence`) with 90-day lifecycle + versioning
+- GCS staging bucket (`YOUR_GCP_PROJECT_ID-staging`) for Agent Engine deployment artifacts
 - Log-based metrics and alert policies in Cloud Monitoring
 
-After apply, capture the outputs you will need later:
+### 5. Build and push the MCP container image
 
-```bash
-terraform -chdir=iac output -raw custom_mcp_url
-terraform -chdir=iac output -raw evidence_bucket_name
-terraform -chdir=iac output -raw staging_bucket_name
-terraform -chdir=iac output -raw agent_service_account_email
-terraform -chdir=iac output -raw gke_connect_command
-```
-
-### 5. Build and push the MCP container
-
-Terraform creates the Artifact Registry repo and the Cloud Run service definition, but it cannot build the container image. Run this once (and any time `mcp/` changes):
+Terraform creates the registry and Cloud Run service definition but cannot build the image. Run once (and whenever `mcp/` changes):
 
 ```bash
 PROJECT_ID=$(terraform -chdir=iac output -raw project_id)
 
+# Build and push via Cloud Build
 gcloud builds submit ./mcp \
   --tag="us-docker.pkg.dev/${PROJECT_ID}/sre-agent-repo/sre-k8s-mcp:v1" \
   --project="${PROJECT_ID}"
-```
 
-Then redeploy Cloud Run to pick up the new image:
-
-```bash
-# Trigger a Terraform refresh so Cloud Run picks up the new image tag
+# Redeploy Cloud Run to pick up the new image
 terraform -chdir=iac apply -target=module.cloudrun
 ```
 
-Verify the Cloud Run service is healthy:
+Verify the service is reachable:
 
 ```bash
-REGION=$(terraform -chdir=iac output -raw region)
-
 gcloud run services describe sre-k8s-mcp \
   --project="${PROJECT_ID}" \
-  --region="${REGION}" \
+  --region="$(terraform -chdir=iac output -raw region)" \
   --format="value(status.url)"
 ```
 
-### 6. Connect kubectl and deploy test incidents
+### 6. Generate agent/.env automatically
+
+This script reads every value from `terraform output` and writes `agent/.env` for you. No manual copy-paste.
 
 ```bash
-# Get the connect command from Terraform output
-$(terraform -chdir=iac output -raw gke_connect_command)
-
-# Verify cluster access
-kubectl get nodes
-
-# Create the test namespace and incident pods
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/oomkilled-pod.yaml
-kubectl apply -f k8s/imagepull-pod.yaml
-kubectl apply -f k8s/crashloop-pod.yaml
-
-# Confirm pods are in expected failure states (may take 1-2 minutes)
-kubectl get pods -n test-incidents
+bash scripts/init-env.sh
 ```
 
-Expected output — the pods should be in failure states so the agent has real incidents to investigate:
+The script prints what it wrote. `agent/.env` is gitignored and must not be committed.
 
-```
-NAME              READY   STATUS             RESTARTS
-oomkilled-pod     0/1     OOMKilled          3
-imagepull-pod     0/1     ImagePullBackOff   0
-crashloop-pod     0/1     CrashLoopBackOff   5
-```
-
-### 7. Configure the agent environment
-
-```bash
-cp agent/.env.example agent/.env
-```
-
-Edit `agent/.env` with your values. You can get most values directly from Terraform:
-
-```bash
-PROJECT_ID=$(terraform -chdir=iac output -raw project_id)
-CUSTOM_MCP_URL=$(terraform -chdir=iac output -raw custom_mcp_url)
-EVIDENCE_BUCKET=$(terraform -chdir=iac output -raw evidence_bucket_name)
-
-cat > agent/.env <<EOF
-PROJECT_ID=${PROJECT_ID}
-REGION=us-central1
-GEMINI_MODEL=gemini-2.5-flash
-K8S_MCP_URL=${CUSTOM_MCP_URL}
-GKE_REMOTE_MCP_URL=https://container.googleapis.com/mcp/read-only
-EVIDENCE_BUCKET=${EVIDENCE_BUCKET}
-EOF
-```
-
-### 8. Set up the Python environment
+### 7. Set up the Python environment
 
 ```bash
 python3 -m venv .venv
@@ -301,7 +242,7 @@ source .venv/bin/activate
 
 pip install --upgrade pip
 pip install -r agent/requirements.txt
-pip install "cloudpickle==3.0.0"        # Required by Agent Engine runtime
+pip install "cloudpickle==3.0.0"
 pip install "google-cloud-aiplatform[agent_engines]>=1.152.0"
 pip install "google-genai>=1.0.0"
 pip install "opentelemetry-api>=1.28.0" "opentelemetry-sdk>=1.28.0" "opentelemetry-exporter-gcp-trace>=1.8.0"
@@ -310,28 +251,51 @@ pip install "opentelemetry-api>=1.28.0" "opentelemetry-sdk>=1.28.0" "opentelemet
 Verify:
 
 ```bash
-python -c "import vertexai, cloudpickle; print('vertexai ok'); print('cloudpickle', cloudpickle.__version__)"
+python -c "import vertexai, cloudpickle; print('ok — cloudpickle', cloudpickle.__version__)"
+```
+
+### 8. Connect kubectl and deploy test incidents
+
+```bash
+# One-command cluster auth — printed by Terraform
+$(terraform -chdir=iac output -raw gke_connect_command)
+
+kubectl get nodes
+
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/oomkilled-pod.yaml
+kubectl apply -f k8s/imagepull-pod.yaml
+kubectl apply -f k8s/crashloop-pod.yaml
+
+# Wait ~2 minutes then confirm pods are in failure states
+kubectl get pods -n test-incidents
+```
+
+Expected:
+
+```
+NAME              READY   STATUS             RESTARTS
+oomkilled-pod     0/1     OOMKilled          3
+imagepull-pod     0/1     ImagePullBackOff   0
+crashloop-pod     0/1     CrashLoopBackOff   5
 ```
 
 ### 9. Test locally
 
-Run the agent on your local machine against the live GKE cluster. This does not require Agent Engine to be deployed yet.
+Run the agent against the live GKE cluster from your workstation. No Agent Engine deployment needed yet.
 
 ```bash
-# OOMKilled investigation
 python run.py "oomkilled-pod keeps getting OOMKilled" \
   --namespace test-incidents --pod oomkilled-pod --severity critical
 
-# ImagePullBackOff investigation
 python run.py "imagepull-pod is in ImagePullBackOff" \
   --namespace test-incidents --pod imagepull-pod --severity high
 
-# CrashLoopBackOff investigation
 python run.py "crashloop-pod is in CrashLoopBackOff" \
   --namespace test-incidents --pod crashloop-pod
 ```
 
-A successful local run prints:
+A successful run prints:
 
 ```
 SRE AGENT — INVESTIGATION REPORT (GCP)
@@ -343,7 +307,7 @@ ROOT CAUSE  ✅ HIGH CONFIDENCE (band: high)
    Container memory limit (50Mi) exceeded actual usage ...
 ```
 
-Confirm evidence was written to GCS:
+Confirm evidence written to GCS:
 
 ```bash
 EVIDENCE_BUCKET=$(terraform -chdir=iac output -raw evidence_bucket_name)
@@ -352,29 +316,23 @@ gcloud storage ls -l "gs://${EVIDENCE_BUCKET}/**" | tail -20
 
 ### 10. Deploy to Agent Engine
 
-Once local tests pass, deploy the agent to Vertex AI Agent Engine. This packages and uploads the LangGraph app so it can be invoked remotely.
+Once local tests pass, deploy to Vertex AI Agent Engine. `agent/.env` already contains `STAGING_BUCKET` and `AGENT_SERVICE_ACCOUNT` from step 6, so no extra exports needed.
 
 ```bash
-STAGING_BUCKET=$(terraform -chdir=iac output -raw staging_bucket_url)
-SA=$(terraform -chdir=iac output -raw agent_service_account_email)
-
-STAGING_BUCKET=${STAGING_BUCKET} AGENT_SERVICE_ACCOUNT=${SA} python deploy_agent.py
+python deploy_agent.py
 ```
 
-The script prints the Agent Engine resource name on completion:
+The script prints the resource name on completion:
 
 ```
 Deployment complete
-Resource: projects/123456789/locations/us-central1/reasoningEngines/987654321
+Resource: projects/YOUR-PROJECT-NUMBER/locations/us-central1/reasoningEngines/987654321
 ```
 
-Export and save that resource name:
+Add the resource name to `agent/.env`:
 
 ```bash
-export AGENT_RESOURCE_NAME="projects/123456789/locations/us-central1/reasoningEngines/987654321"
-
-# Also add to agent/.env so invoke_agent.py picks it up automatically
-echo "AGENT_RESOURCE_NAME=${AGENT_RESOURCE_NAME}" >> agent/.env
+echo "AGENT_RESOURCE_NAME=projects/YOUR-PROJECT-NUMBER/locations/us-central1/reasoningEngines/987654321" >> agent/.env
 ```
 
 ### 11. Invoke the deployed agent
@@ -396,7 +354,6 @@ python invoke_agent.py "crashloop-pod is in CrashLoopBackOff" \
 
 ```bash
 EVIDENCE_BUCKET=$(terraform -chdir=iac output -raw evidence_bucket_name)
-
 gcloud storage ls -l "gs://${EVIDENCE_BUCKET}/**" | tail -20
 gcloud storage cat "gs://${EVIDENCE_BUCKET}/<run-id>/ev_001.json"
 ```
@@ -405,32 +362,42 @@ gcloud storage cat "gs://${EVIDENCE_BUCKET}/<run-id>/ev_001.json"
 
 ```bash
 PROJECT_ID=$(terraform -chdir=iac output -raw project_id)
-
 gcloud logging read 'jsonPayload.run_id:*' \
   --project="${PROJECT_ID}" \
   --limit=10 \
   --format="table(timestamp,jsonPayload.run_id,jsonPayload.incident_type,jsonPayload.confidence,jsonPayload.status)"
 ```
 
-**Cloud Trace:**
-
-Open [Cloud Trace Explorer](https://console.cloud.google.com/traces) in the GCP console and filter by the service name `sre-agent` to see per-node span timings.
+**Cloud Trace:** Open [Cloud Trace Explorer](https://console.cloud.google.com/traces) and filter by service name `sre-agent`.
 
 ---
 
-## Environment variables reference
+## Configuration reference
 
-These live in `agent/.env`. All values except `GKE_REMOTE_MCP_URL` come from your Terraform outputs.
+### The only file you edit: `iac/terraform.tfvars`
 
-| Variable | Required | Source |
+| Variable | Required | Description |
 |---|---|---|
-| `PROJECT_ID` | Yes | `terraform output -raw project_id` |
-| `REGION` | Yes | `terraform output -raw region` |
-| `GEMINI_MODEL` | Yes | Hard-code `gemini-2.5-flash` |
-| `K8S_MCP_URL` | Yes | `terraform output -raw custom_mcp_url` |
-| `GKE_REMOTE_MCP_URL` | Yes | Fixed: `https://container.googleapis.com/mcp/read-only` |
-| `EVIDENCE_BUCKET` | Yes | `terraform output -raw evidence_bucket_name` |
-| `AGENT_RESOURCE_NAME` | After step 10 | Printed by `deploy_agent.py` |
+| `project_id` | Yes | Your GCP project ID (globally unique) |
+| `billing_account` | Yes | GCP billing account — `gcloud billing accounts list` |
+| `region` | No | Default `us-central1` |
+| `zone` | No | Default `us-central1-a` |
+
+### Auto-generated: `agent/.env`
+
+Generated by `bash scripts/init-env.sh` after `terraform apply`. Never edit manually — re-run the script to refresh.
+
+| Variable | Source |
+|---|---|
+| `PROJECT_ID` | `terraform output -raw project_id` |
+| `REGION` | `terraform output -raw region` |
+| `GEMINI_MODEL` | Hard-coded `gemini-2.5-flash` |
+| `K8S_MCP_URL` | `terraform output -raw custom_mcp_url` |
+| `GKE_REMOTE_MCP_URL` | Fixed: `https://container.googleapis.com/mcp/read-only` |
+| `EVIDENCE_BUCKET` | `terraform output -raw evidence_bucket_name` |
+| `STAGING_BUCKET` | `terraform output -raw staging_bucket_url` |
+| `AGENT_SERVICE_ACCOUNT` | `terraform output -raw agent_service_account_email` |
+| `AGENT_RESOURCE_NAME` | Added manually after `python deploy_agent.py` |
 
 ---
 
@@ -438,20 +405,20 @@ These live in `agent/.env`. All values except `GKE_REMOTE_MCP_URL` come from you
 
 Run `terraform -chdir=iac output` to see all values. Key outputs:
 
-| Output name | Description |
-|---|---|
-| `project_id` | GCP project ID |
-| `agent_service_account_email` | Runtime service account |
-| `gke_cluster_name` | GKE cluster name |
-| `gke_connect_command` | Full `gcloud ... get-credentials` command |
-| `custom_mcp_url` | Cloud Run MCP server URL |
-| `mcp_build_command` | Full `gcloud builds submit` command for the MCP image |
-| `evidence_bucket_name` | Evidence GCS bucket name (no `gs://`) |
-| `evidence_bucket_url` | Evidence GCS bucket URL (with `gs://`) |
-| `staging_bucket_name` | Staging GCS bucket name |
-| `staging_bucket_url` | Staging GCS bucket URL (with `gs://`) |
-| `gke_remote_mcp_url` | Google-managed GKE Remote MCP endpoint |
-| `summary` | Full infrastructure summary block |
+| Output name                   | Description                                           |
+| ----------------------------- | ----------------------------------------------------- |
+| `project_id`                  | GCP project ID                                        |
+| `agent_service_account_email` | Runtime service account                               |
+| `gke_cluster_name`            | GKE cluster name                                      |
+| `gke_connect_command`         | Full `gcloud ... get-credentials` command             |
+| `custom_mcp_url`              | Cloud Run MCP server URL                              |
+| `mcp_build_command`           | Full `gcloud builds submit` command for the MCP image |
+| `evidence_bucket_name`        | Evidence GCS bucket name (no `gs://`)                 |
+| `evidence_bucket_url`         | Evidence GCS bucket URL (with `gs://`)                |
+| `staging_bucket_name`         | Staging GCS bucket name                               |
+| `staging_bucket_url`          | Staging GCS bucket URL (with `gs://`)                 |
+| `gke_remote_mcp_url`          | Google-managed GKE Remote MCP endpoint                |
+| `summary`                     | Full infrastructure summary block                     |
 
 ---
 
@@ -459,29 +426,29 @@ Run `terraform -chdir=iac output` to see all values. Key outputs:
 
 Everything in the table below is created and managed by `terraform apply`. You do not need to create these manually.
 
-| Resource | Terraform file |
-|---|---|
-| GCP project + billing link | `main.tf` |
-| All required APIs | `main.tf` |
-| VPC, subnet, Cloud NAT | `modules/networking/` |
-| GKE Autopilot cluster | `modules/gke/` |
-| Service account + IAM roles | `modules/iam/` |
-| Artifact Registry repository | `modules/cloudrun/` |
-| Cloud Run MCP service + invoker IAM | `modules/cloudrun/` |
-| GCS evidence bucket + lifecycle + IAM | `main.tf` |
-| GCS staging bucket + IAM | `main.tf` |
-| Log-based metrics (invocations, errors, escalations) | `monitoring.tf` |
-| Alert policies (high error rate, high escalation rate) | `monitoring.tf` |
+| Resource                                               | Terraform file        |
+| ------------------------------------------------------ | --------------------- |
+| GCP project + billing link                             | `main.tf`             |
+| All required APIs                                      | `main.tf`             |
+| VPC, subnet, Cloud NAT                                 | `modules/networking/` |
+| GKE Autopilot cluster                                  | `modules/gke/`        |
+| Service account + IAM roles                            | `modules/iam/`        |
+| Artifact Registry repository                           | `modules/cloudrun/`   |
+| Cloud Run MCP service + invoker IAM                    | `modules/cloudrun/`   |
+| GCS evidence bucket + lifecycle + IAM                  | `main.tf`             |
+| GCS staging bucket + IAM                               | `main.tf`             |
+| Log-based metrics (invocations, errors, escalations)   | `monitoring.tf`       |
+| Alert policies (high error rate, high escalation rate) | `monitoring.tf`       |
 
 **Not managed by Terraform** (by design):
 
-| Item | Why |
-|---|---|
-| MCP container image build | Requires `docker` / Cloud Build — kept in a script |
-| LangGraph Agent Engine deployment | Application packaging — kept in `deploy_agent.py` |
-| k8s test manifests | Applied once by the operator with `kubectl apply` |
-| Agent invocation | Runtime test — kept in `invoke_agent.py` |
-| Agent Registry alpha commands | API still in alpha |
+| Item                              | Why                                                |
+| --------------------------------- | -------------------------------------------------- |
+| MCP container image build         | Requires `docker` / Cloud Build — kept in a script |
+| LangGraph Agent Engine deployment | Application packaging — kept in `deploy_agent.py`  |
+| k8s test manifests                | Applied once by the operator with `kubectl apply`  |
+| Agent invocation                  | Runtime test — kept in `invoke_agent.py`           |
+| Agent Registry alpha commands     | API still in alpha                                 |
 
 ---
 

@@ -10,7 +10,7 @@ spec:
   restartPolicy: Always
   containers:
     - name: bad-image
-      image: gcr.io/sreagent-demo/nonexistent-image:v99.9.9
+      image: gcr.io/google-containers/nonexistent-image:v99.9.9
       resources:
         requests:
           memory: "32Mi"

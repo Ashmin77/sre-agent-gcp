@@ -16,7 +16,7 @@ from google.genai import types
 
 log = logging.getLogger("sre-agent.gemini")
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "sreagent-demo")
+PROJECT_ID = os.environ.get("PROJECT_ID", "your-gcp-project-id")
 REGION     = os.environ.get("REGION", "us-central1")
 MODEL      = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 

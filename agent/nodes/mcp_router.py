@@ -1,5 +1,4 @@
 """
-mcp_router.py
 Selects ONE MCP source AND ONE tool per iteration.
 Enforces tool allowlist.
 Passes evidence_count to prompt so router knows when it must keep collecting.

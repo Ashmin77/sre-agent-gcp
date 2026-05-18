@@ -53,7 +53,7 @@ def get_tracer():
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
         from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 
-        project_id = os.environ.get("PROJECT_ID", "sreagent-demo")
+        project_id = os.environ.get("PROJECT_ID", "your-gcp-project-id")
 
         resource = Resource.create(
             {

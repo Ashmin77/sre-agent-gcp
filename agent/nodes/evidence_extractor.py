@@ -1,8 +1,5 @@
 """
-evidence_extractor.py
-
 Writes raw sanitized evidence to GCS and stores compressed facts in state.
-This version avoids aggressive truncation in the final report.
 """
 
 import json

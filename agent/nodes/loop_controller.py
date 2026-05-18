@@ -1,7 +1,5 @@
 """
-loop_controller.py
 Decides continue or exit using multi-signal production rules.
-Key fix: tool_signaled_done only exits AFTER min_steps are complete.
 enough_evidence=True ALWAYS exits immediately.
 """
 import logging

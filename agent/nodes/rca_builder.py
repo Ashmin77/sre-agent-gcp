@@ -19,7 +19,7 @@ from agent.otel import trace_node
 
 log = logging.getLogger("sre-agent.rca_builder")
 
-EVIDENCE_BUCKET = os.environ.get("EVIDENCE_BUCKET", "sreagent-demo-evidence")
+EVIDENCE_BUCKET = os.environ.get("EVIDENCE_BUCKET", "your-gcp-project-id-evidence")
 GEMINI_MODEL    = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 

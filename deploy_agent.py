@@ -15,12 +15,12 @@ from dotenv import load_dotenv
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(ROOT_DIR, "agent", ".env"))
 
-PROJECT_ID = os.getenv("PROJECT_ID", "sreagent-demo")
+PROJECT_ID = os.getenv("PROJECT_ID", "your-gcp-project-id")
 REGION = os.getenv("REGION", "us-central1")
-STAGING_BUCKET = os.getenv("STAGING_BUCKET", "gs://sreagent-demo-staging")
+STAGING_BUCKET = os.getenv("STAGING_BUCKET", "gs://your-gcp-project-id-staging")
 SERVICE_ACCOUNT = os.getenv(
     "AGENT_SERVICE_ACCOUNT",
-    "sre-agent-sa@sreagent-demo.iam.gserviceaccount.com",
+    "sre-agent-sa@your-gcp-project-id.iam.gserviceaccount.com",
 )
 
 

@@ -6,7 +6,6 @@ Resolves target cluster and MCP source strategy.
 Design:
 - GKE Remote MCP is primary.
 - Custom K8s MCP is fallback.
-- Does not hardcode incident steps.
 """
 
 import logging
@@ -39,7 +38,7 @@ def context_resolver(state: AgentState) -> dict:
     cluster_info = resolve_cluster(cluster_name)
 
     resolved_cluster = cluster_info.get("cluster_name", cluster_name)
-    project_id = cluster_info.get("project", "sreagent-demo")
+    project_id = cluster_info.get("project", os.environ.get("PROJECT_ID", "your-gcp-project-id"))
     region = cluster_info.get("region", "us-central1")
 
     primary = cluster_info.get("mcp_primary", "gke_remote_mcp")

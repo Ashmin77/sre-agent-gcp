@@ -8,7 +8,7 @@
         "properties": {
           "parent": {
             "type": "string",
-            "description": "GKE cluster resource path, for example projects/sreagent-demo/locations/us-central1/clusters/sre-test-cluster"
+            "description": "GKE cluster resource path, for example projects/your-gcp-project-id/locations/us-central1/clusters/sre-test-cluster"
           },
           "namespace": {
             "type": "string",

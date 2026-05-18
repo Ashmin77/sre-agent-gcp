@@ -11,7 +11,7 @@ from google.cloud import storage
 
 log = logging.getLogger("sre-agent.gcs")
 
-BUCKET = os.environ.get("EVIDENCE_BUCKET", "sreagent-demo-evidence")
+BUCKET = os.environ.get("EVIDENCE_BUCKET", "your-gcp-project-id-evidence")
 
 _client: storage.Client | None = None
 

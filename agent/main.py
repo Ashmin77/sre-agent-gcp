@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("sre-agent.server")
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "sreagent-demo")
+PROJECT_ID = os.environ.get("PROJECT_ID", "your-gcp-project-id")
 
 # Graph is compiled lazily — not at import time
 # This prevents Agent Runtime container startup failures

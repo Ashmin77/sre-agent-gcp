@@ -1,5 +1,4 @@
 """
-input_normalizer.py
 Parses alert/query and extracts incident context.
 CLI hints (namespace, pod, cluster) always override LLM guesses.
 """

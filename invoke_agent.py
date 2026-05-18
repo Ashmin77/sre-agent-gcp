@@ -17,14 +17,14 @@ Usage:
 
 Environment variables required:
   AGENT_RESOURCE_NAME   Full resource name from Agent Runtime deployment
-                        e.g. projects/239722105604/locations/us-central1/reasoningEngines/123456
-  PROJECT_ID            sreagent-demo
+                        e.g. projects/YOUR-PROJECT-NUMBER/locations/us-central1/reasoningEngines/123456
+  PROJECT_ID            your-gcp-project-id
   REGION                us-central1
 
 How to get AGENT_RESOURCE_NAME after deployment:
   python deploy_agent.py  (prints the resource name)
   OR
-  gcloud ai reasoning-engines list --region=us-central1 --project=sreagent-demo
+  gcloud ai reasoning-engines list --region=us-central1 --project=your-gcp-project-id
 """
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ import time
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), "agent", ".env"))
 
-PROJECT_ID           = os.getenv("PROJECT_ID", "sreagent-demo")
+PROJECT_ID           = os.getenv("PROJECT_ID", "your-gcp-project-id")
 REGION               = os.getenv("REGION", "us-central1")
 AGENT_RESOURCE_NAME  = os.getenv("AGENT_RESOURCE_NAME", "")
 
