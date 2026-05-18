@@ -6,52 +6,11 @@ Built with [LangGraph](https://langchain-ai.github.io/langgraph/) and deployed t
 
 ---
 
-## How it works
+## Architecture
 
-```
-Incident query (string)
-        │
-        ▼
-┌────────────────────────────────────────────────────────────────┐
-│  SREAgent  (LangGraph — 9 sequential nodes)                    │
-│                                                                │
-│  input_normalizer → context_resolver → task_planner           │
-│                                              │                 │
-│                                         mcp_router            │
-│                                              │                 │
-│                              ┌───────────────┴──────────────┐  │
-│                              │          tool_executor        │  │
-│                              │  ┌────────────────────────┐  │  │
-│                              │  │ GKE Remote MCP         │  │  │
-│                              │  │ container.googleapis.com│  │  │
-│                              │  │ /mcp/read-only          │  │  │
-│                              │  │ (Google-managed)        │  │  │
-│                              │  └────────────────────────┘  │  │
-│                              │  ┌────────────────────────┐  │  │
-│                              │  │ Custom MCP (Cloud Run) │  │  │
-│                              │  │ sre-k8s-mcp            │  │  │
-│                              │  │ (fallback)             │  │  │
-│                              │  └────────────────────────┘  │  │
-│                              └───────────────┬──────────────┘  │
-│                                              │                 │
-│                         evidence_extractor ◄─┘                 │
-│                              │                                 │
-│                         task_evaluator                         │
-│                              │                                 │
-│                         loop_controller ────► task_planner     │
-│                         (if more evidence      (next tool)     │
-│                          is needed)                            │
-│                              │ (done)                          │
-│                         rca_builder                            │
-└──────────────┬───────────────┴────────────────────────────────┘
-               │
-       ┌───────┴────────────────────────────────────┐
-       │  Evidence JSON  →  GCS  (audit trail)      │
-       │  RCA summary    →  caller                  │
-       │  Structured log →  Cloud Logging           │
-       │  Span tree      →  Cloud Trace (OTEL)      │
-       └────────────────────────────────────────────┘
-```
+![GCP SRE Agent — Phase 1 Production Architecture](docs/architecture.jpeg)
+
+The agent runs as a LangGraph workflow on Vertex AI Agent Engine. It receives an incident query, resolves the cluster context, plans which evidence to collect, routes MCP calls through the Agent Gateway to GKE Remote MCP (or the Cloud Run fallback), extracts and sanitizes each response to GCS, evaluates whether enough evidence has been gathered, and loops back to the planner if gaps remain — exiting only when confidence is sufficient to produce a cited RCA draft.
 
 ### Supported incident types
 
