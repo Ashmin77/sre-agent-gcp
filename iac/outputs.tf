@@ -62,24 +62,31 @@ output "workload_identity_pool" {
 # ── GKE ──────────────────────────────────────────────────────────
 
 output "gke_cluster_name" {
-  description = "GKE cluster name."
-  value       = module.gke.cluster_name
+  description = "Target GKE cluster name (demo or existing)."
+  value       = local.gke_cluster_name
 }
 
 output "gke_cluster_location" {
-  description = "GKE cluster region."
-  value       = module.gke.cluster_location
+  description = "Target GKE cluster region or zone."
+  value       = local.gke_cluster_location
 }
 
 output "gke_cluster_endpoint" {
   description = "GKE API server endpoint IP address."
-  value       = module.gke.cluster_endpoint
+  value       = data.google_container_cluster.sre_test.endpoint
   sensitive   = true
+}
+
+output "gke_namespace" {
+  description = "Target investigation namespace."
+  value       = local.gke_cluster_namespace
 }
 
 output "gke_connect_command" {
   description = "Run this command to configure kubectl for the cluster."
-  value       = "gcloud container clusters get-credentials ${module.gke.cluster_name} --region ${var.region} --project ${var.project_id}"
+  value = (var.create_gke_cluster || var.existing_gke_location_type == "region") ?
+    "gcloud container clusters get-credentials ${local.gke_cluster_name} --region ${local.gke_cluster_location} --project ${local.gke_cluster_project}" :
+    "gcloud container clusters get-credentials ${local.gke_cluster_name} --zone ${local.gke_cluster_location} --project ${local.gke_cluster_project}"
 }
 
 # ── MCP SERVER ───────────────────────────────────────────────────

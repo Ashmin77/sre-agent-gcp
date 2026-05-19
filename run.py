@@ -30,9 +30,6 @@ import os
 import sys
 import time
 
-# ── Path setup ────────────────────────────────────────────────────
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "agent"))
-
 # ── Load .env ─────────────────────────────────────────────────────
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), "agent", ".env"))
@@ -47,7 +44,7 @@ if _missing:
         print(f"  export {v}=<value>")
     sys.exit(1)
 
-from graph import compile_graph, get_initial_state
+from agent.graph import compile_graph, get_initial_state
 
 # ── Logging ───────────────────────────────────────────────────────
 logging.basicConfig(

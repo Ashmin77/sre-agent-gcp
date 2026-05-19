@@ -41,3 +41,49 @@ variable "zone" {
     error_message = "zone must be a valid GCP zone name, e.g. us-central1-a."
   }
 }
+
+# ── EXISTING CLUSTER MODE ─────────────────────────────────────────
+# Set create_gke_cluster = false and supply the values below to point
+# the agent at a GKE cluster you already operate instead of creating
+# a new demo cluster. See README Path 2 and Appendix A for full steps.
+
+variable "create_gke_cluster" {
+  description = "When true, Terraform creates a new GKE Autopilot demo cluster. Set to false to use an existing cluster (supply existing_gke_* variables below)."
+  type        = bool
+  default     = true
+}
+
+variable "existing_gke_project_id" {
+  description = "Project ID of the existing GKE cluster. Only used when create_gke_cluster = false."
+  type        = string
+  default     = null
+}
+
+variable "existing_gke_cluster" {
+  description = "Name of the existing GKE cluster. Only used when create_gke_cluster = false."
+  type        = string
+  default     = null
+}
+
+variable "existing_gke_location" {
+  description = "Region or zone of the existing GKE cluster. Only used when create_gke_cluster = false."
+  type        = string
+  default     = null
+}
+
+variable "existing_gke_location_type" {
+  description = "Whether existing_gke_location is a region or zone. Must be 'region' or 'zone'."
+  type        = string
+  default     = "region"
+
+  validation {
+    condition     = contains(["region", "zone"], var.existing_gke_location_type)
+    error_message = "existing_gke_location_type must be 'region' or 'zone'."
+  }
+}
+
+variable "existing_gke_namespace" {
+  description = "Kubernetes namespace to investigate on the existing cluster. Only used when create_gke_cluster = false."
+  type        = string
+  default     = "default"
+}

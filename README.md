@@ -262,30 +262,22 @@ terraform -chdir=iac plan
 
 ---
 
-## Step 5 — Apply base infrastructure
+## Step 5 — Create project, APIs, and Artifact Registry (first partial apply)
+
+The Cloud Run module references the MCP container image, which does not exist yet. Running a full `terraform apply` at this point will fail because Cloud Run cannot pull an image that has not been built. Run a targeted apply first to create only the Artifact Registry (and its dependencies: the GCP project, billing link, and APIs):
 
 ```bash
-terraform -chdir=iac apply
+terraform -chdir=iac apply -target=module.cloudrun.google_artifact_registry_repository.sre_agent
 ```
 
-Terraform creates:
-
-- VPC, subnet, Cloud NAT
-- GKE Autopilot cluster (`sre-test-cluster`)
-- Service account (`sre-agent-sa`) with least-privilege IAM roles
-- Artifact Registry repository for the MCP container image
-- Cloud Run MCP service definition (`sre-k8s-mcp`) — activated in step 7 once the image exists
-- GCS evidence bucket (`YOUR_GCP_PROJECT_ID-evidence`) — 90-day lifecycle, versioning enabled
-- GCS staging bucket (`YOUR_GCP_PROJECT_ID-staging`) — for Agent Engine deployment artifacts
-- Log-based metrics and alert policies in Cloud Monitoring
-
-> **If apply fails because the Cloud Run image does not exist:** Terraform creates the Cloud Run service and references the image, but the image has not been built yet. This can cause a first-apply failure. Follow the recovery flow: complete step 6 to build the image, then run `terraform -chdir=iac apply` again.
+This creates:
+- GCP project + billing link
+- All required APIs
+- Artifact Registry repository (`sre-agent-repo`)
 
 ---
 
 ## Step 6 — Build and push the MCP container image
-
-Run after Artifact Registry exists (created in step 5):
 
 ```bash
 PROJECT_ID=$(terraform -chdir=iac output -raw project_id)
@@ -297,13 +289,24 @@ gcloud builds submit ./mcp \
 
 ---
 
-## Step 7 — Re-apply to activate Cloud Run with the new image
+## Step 7 — Apply remaining infrastructure (full apply)
+
+The image now exists. Run the full apply to create everything else:
 
 ```bash
-terraform -chdir=iac apply -target=module.cloudrun
+terraform -chdir=iac apply
 ```
 
-Verify the service URL is returned:
+Terraform creates:
+- VPC, subnet, Cloud NAT
+- GKE Autopilot cluster (`sre-test-cluster`)
+- Service account (`sre-agent-sa`) with least-privilege IAM roles
+- Cloud Run MCP service (`sre-k8s-mcp`) — now pulls the image built in step 6
+- GCS evidence bucket (`YOUR_GCP_PROJECT_ID-evidence`) — 90-day lifecycle, versioning enabled
+- GCS staging bucket (`YOUR_GCP_PROJECT_ID-staging`) — for Agent Engine deployment artifacts
+- Log-based metrics and alert policies in Cloud Monitoring
+
+Verify Cloud Run is running:
 
 ```bash
 gcloud run services describe sre-k8s-mcp \
@@ -1230,21 +1233,24 @@ See [Path 2 — Existing GKE cluster mode](#path-2--existing-gke-cluster-mode) f
 
 These are known issues in the current implementation that are acceptable for Phase 0 validation but should be addressed before production use.
 
-| Area | Current behaviour | Recommended change |
+| Area | Status | Notes |
 |---|---|---|
-| **CA cert stored in evidence bucket** | Cloud Run reads the GKE CA cert from `gs://YOUR_PROJECT-evidence/config/ca.crt` | Use a dedicated config bucket or Secret Manager to keep config material separate from evidence files |
-| **`requirements.txt` was incomplete** | Fixed — all packages including `google-genai`, `cloudpickle==3.0.0`, and OpenTelemetry are now in `agent/requirements.txt` | No action needed — fixed in this version |
-| **Mixed Agent Engine SDK styles** | Fixed — both `deploy_agent.py` and `invoke_agent.py` now use `vertexai.agent_engines` | No action needed — fixed in this version |
-| **Terraform creates a new GCP project** | `iac/project.tf` runs `google_project` by default | Use `terraform import` or remove the resource block if targeting an existing project |
-| **Single Cloud Run MCP per deployment** | One Cloud Run MCP URL per Terraform deployment | For existing cluster mode, deploy a separate Cloud Run MCP and add its URL as `K8S_MCP_URL_2` |
+| **CA cert stored in evidence bucket** | Open | Cloud Run reads the GKE CA cert from `gs://YOUR_PROJECT-evidence/config/ca.crt`. Phase 0 acceptable; use Secret Manager in production to separate config from evidence |
+| **`requirements.txt` was incomplete** | Fixed | All packages (`google-genai`, `cloudpickle==3.0.0`, OpenTelemetry, `google-cloud-aiplatform[agent_engines]`) are now in `agent/requirements.txt` |
+| **Mixed Agent Engine SDK styles** | Fixed | Both `deploy_agent.py` and `invoke_agent.py` now use `vertexai.agent_engines` |
+| **`run.py` path hack** | Fixed | `sys.path.insert` removed; now uses `from agent.graph import ...` package imports |
+| **Terraform creates a new GCP project by default** | Open | `iac/project.tf` runs `google_project` by default. Use `terraform import google_project.sre_agent YOUR_PROJECT_ID` or remove the resource block if targeting an existing project |
+| **First `terraform apply` could fail** | Fixed | Deployment now uses a targeted partial apply (Artifact Registry only) before building the image, then a full apply |
+| **Existing cluster mode not wired in Terraform** | Fixed | `iac/variables.tf` now includes `create_gke_cluster` and `existing_gke_*` variables; `iac/main.tf` GKE module is now conditional |
+| **Single Cloud Run MCP per deployment** | Open | One Cloud Run MCP URL per Terraform deployment. For additional clusters, deploy a separate Cloud Run MCP and add its URL as `K8S_MCP_URL_2` |
 
 ---
 
 # Appendix A — Terraform changes for existing GKE cluster mode
 
-These changes are **not yet committed** to the repo. They are required before Path 2 works.
+These changes are **already implemented** in the repo. This appendix documents what was added and why, so operators understand the shape of the code when customising it.
 
-### 1. Add variables to `iac/variables.tf`
+### 1. Variables added to `iac/variables.tf`
 
 ```hcl
 variable "create_gke_cluster" {
