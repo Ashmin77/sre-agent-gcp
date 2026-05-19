@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-invoke_agent.py — Call the deployed Agent Runtime directly.
+invoke_agent.py — Call the deployed Vertex AI Agent Engine agent.
 
-Mirrors the AWS invoke_remote.py pattern exactly.
-Use this after deploying the LangGraph agent to Gemini Enterprise Agent Runtime.
+Use this after deploying the LangGraph agent with deploy_agent.py.
+Uses the same vertexai.agent_engines API as deploy_agent.py.
 
 Usage:
   python invoke_agent.py "imagepull-pod is in ImagePullBackOff" \
@@ -54,22 +54,20 @@ def _invoke(resource_name: str, payload: dict) -> dict:
 
     try:
         import vertexai
-        from vertexai.preview import reasoning_engines
+        from vertexai import agent_engines
 
         vertexai.init(project=PROJECT_ID, location=REGION)
 
         print(f"\n{'─'*60}")
-        print(f"  Invoking SRE Agent on Agent Runtime")
+        print(f"  Invoking SRE Agent on Agent Engine")
         print(f"  Resource: {resource_name}")
         print(f"  Payload:  {json.dumps(payload)}")
         print(f"{'─'*60}")
 
         started = time.time()
 
-        # Get the deployed agent
-        remote_agent = reasoning_engines.ReasoningEngine(resource_name)
-
-        # Invoke — mirrors AWS client.invoke_agent_runtime()
+        # Get the deployed agent and invoke
+        remote_agent = agent_engines.get(resource_name)
         response = remote_agent.query(**payload)
 
         duration = round(time.time() - started, 2)

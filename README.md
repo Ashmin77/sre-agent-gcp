@@ -101,8 +101,9 @@ Raw MCP responses are written to GCS. Only compressed facts and evidence IDs flo
 | **Path 1 — Demo cluster**     | Build a clean test environment from scratch | Terraform creates a new GKE Autopilot cluster                    |
 | **Path 2 — Existing cluster** | Connect to a cluster you already operate    | Terraform skips GKE creation; you supply cluster values manually |
 
-> **Current Terraform state:** The repo creates a new GCP project and demo GKE cluster by default (Path 1).
-> Path 2 (existing cluster) requires the Terraform changes described in [Appendix A](#appendix-a--terraform-changes-for-existing-gke-cluster-mode).
+> **Current Terraform state:** The repo creates a **new GCP project** and demo GKE cluster by default (Path 1).
+> If you want to use an existing GCP project, you must either import it into Terraform state (`terraform import google_project.sre_agent YOUR_PROJECT_ID`) or remove the `google_project` and `google_billing_project_info` resources from `iac/project.tf` and update `iac/main.tf` to reference your project directly.
+> Path 2 (existing cluster) additionally requires the Terraform changes described in [Appendix A](#appendix-a--terraform-changes-for-existing-gke-cluster-mode).
 
 ---
 
@@ -1123,6 +1124,119 @@ gcloud logging read 'jsonPayload.run_id:*' \
   --limit=10 \
   --format="table(timestamp,jsonPayload.run_id,jsonPayload.incident_type,jsonPayload.confidence,jsonPayload.status)"
 ```
+
+---
+
+# Relationship to the ADR
+
+The ADR (`SRE_Agent_ADR.docx`) is an Architecture Design and Roadmap document. It intentionally describes both the current validated implementation and future phases.
+
+Items in the ADR that are **not yet implemented** in this repo (by design — they are future phase items):
+
+| ADR item | ADR phase | Repo status |
+|---|---|---|
+| Agent Gateway (mTLS, IAM governance, audit logging) | Phase 2+ | Not wired — all MCP calls go direct via service account identity |
+| `memory_lookup` node (long-term pattern matching) | Planned | Not implemented — `context_resolver` handles cluster context instead |
+| Four-gate validated memory pipeline | Planned | Not implemented |
+| PagerDuty webhook ingestion | Phase 1+ | Not implemented |
+
+Items where the ADR and repo **differ on current details**:
+
+| Item | ADR says | Repo uses | Note |
+|---|---|---|---|
+| Gemini model | `gemini-2.0-flash` / `gemini-2.0-flash-001` | `gemini-2.5-flash` | Repo uses the validated version — ADR will be updated |
+| MCP tool names (Appendix A) | `get_pods`, `describe_pod`, `get_pod_logs` | `list_k8s_events`, `describe_k8s_resource`, `get_k8s_resource` | ADR documents assumed names; toolspec.json has the real validated names |
+| Run ID format | `run_20260505_001` (sequential) | `run_YYYYMMDD_HHMMSS_xxxx` (timestamp + suffix) | Minor format difference |
+
+Everything else in the ADR (node names except `memory_lookup`, infrastructure names, service account, GKE cluster, VPC, bucket naming, confidence bands, evidence ID format) matches the repo exactly.
+
+---
+
+# FAQ — Adding additional GKE clusters
+
+The agent uses a **cluster registry** defined in `agent/mcp_client.py` to route investigations to the correct GKE cluster and MCP endpoint. By default it holds two entries driven by environment variables.
+
+## How the registry works
+
+```python
+# agent/mcp_client.py — CLUSTER_REGISTRY
+CLUSTER_REGISTRY = {
+    os.environ.get("CLUSTER_1_NAME", "sre-test-cluster"): {
+        "project":      os.environ.get("PROJECT_ID",       "your-gcp-project-id"),
+        "region":       os.environ.get("CLUSTER_1_REGION", "us-central1"),
+        "mcp_primary":  "gke_remote_mcp",
+        "mcp_fallback": "k8s_mcp",
+        "mcp_url":      os.environ.get("K8S_MCP_URL",      ""),
+    },
+    os.environ.get("CLUSTER_2_NAME", "sre-test-cluster-2"): {
+        "project":      os.environ.get("PROJECT_ID_2",     "your-gcp-project-id-2"),
+        "region":       os.environ.get("CLUSTER_2_REGION", "us-east1"),
+        "mcp_primary":  "gke_remote_mcp",
+        "mcp_fallback": "k8s_mcp",
+        "mcp_url":      os.environ.get("K8S_MCP_URL_2",    ""),
+    },
+}
+```
+
+The `mcp_router` node calls `resolve_cluster(cluster_name)` which looks up the incident cluster name in this registry. If the name is not found, it defaults to the first entry and logs a warning.
+
+## Adding a new cluster (demo cluster mode)
+
+Add the new cluster's variables to `agent/.env`:
+
+```bash
+# Cluster 2 (add to agent/.env after init-env.sh)
+CLUSTER_2_NAME=my-second-cluster
+CLUSTER_2_REGION=us-east1
+PROJECT_ID_2=my-second-gcp-project
+K8S_MCP_URL_2=https://your-second-cloud-run-mcp-url
+```
+
+No code change required — the registry reads from env vars.
+
+## Adding a third or more clusters
+
+The current registry is hardcoded for two entries. To add a third cluster, extend `CLUSTER_REGISTRY` in `agent/mcp_client.py`:
+
+```python
+os.environ.get("CLUSTER_3_NAME", "cluster-3"): {
+    "project":      os.environ.get("PROJECT_ID_3",     "your-project-3"),
+    "region":       os.environ.get("CLUSTER_3_REGION", "europe-west1"),
+    "mcp_primary":  "gke_remote_mcp",
+    "mcp_fallback": "k8s_mcp",
+    "mcp_url":      os.environ.get("K8S_MCP_URL_3",    ""),
+},
+```
+
+Then add the corresponding variables to `agent/.env`.
+
+## IAM required for each additional cluster
+
+For each new cluster you register, grant the agent service account read-only access in that cluster's project:
+
+```bash
+AGENT_SA="sre-agent-sa@${YOUR_AGENT_PROJECT}.iam.gserviceaccount.com"
+
+gcloud projects add-iam-policy-binding YOUR_CLUSTER_PROJECT \
+  --member="serviceAccount:${AGENT_SA}" \
+  --role="roles/container.clusterViewer"
+```
+
+See [Path 2 — Existing GKE cluster mode](#path-2--existing-gke-cluster-mode) for the full IAM and optional RBAC steps.
+
+---
+
+# Known prototype limitations
+
+These are known issues in the current implementation that are acceptable for Phase 0 validation but should be addressed before production use.
+
+| Area | Current behaviour | Recommended change |
+|---|---|---|
+| **CA cert stored in evidence bucket** | Cloud Run reads the GKE CA cert from `gs://YOUR_PROJECT-evidence/config/ca.crt` | Use a dedicated config bucket or Secret Manager to keep config material separate from evidence files |
+| **`requirements.txt` was incomplete** | Fixed — all packages including `google-genai`, `cloudpickle==3.0.0`, and OpenTelemetry are now in `agent/requirements.txt` | No action needed — fixed in this version |
+| **Mixed Agent Engine SDK styles** | Fixed — both `deploy_agent.py` and `invoke_agent.py` now use `vertexai.agent_engines` | No action needed — fixed in this version |
+| **Terraform creates a new GCP project** | `iac/project.tf` runs `google_project` by default | Use `terraform import` or remove the resource block if targeting an existing project |
+| **Single Cloud Run MCP per deployment** | One Cloud Run MCP URL per Terraform deployment | For existing cluster mode, deploy a separate Cloud Run MCP and add its URL as `K8S_MCP_URL_2` |
 
 ---
 
