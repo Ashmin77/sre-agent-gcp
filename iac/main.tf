@@ -38,10 +38,12 @@ module "gke" {
 
 # ── Effective cluster values (works for both modes) ──────────────
 locals {
-  gke_cluster_name     = var.create_gke_cluster ? module.gke[0].cluster_name : var.existing_gke_cluster
-  gke_cluster_project  = var.create_gke_cluster ? google_project.sre_agent.project_id : var.existing_gke_project_id
-  gke_cluster_location = var.create_gke_cluster ? var.region : var.existing_gke_location
+  gke_cluster_name      = var.create_gke_cluster ? module.gke[0].cluster_name : var.existing_gke_cluster
+  gke_cluster_project   = var.create_gke_cluster ? google_project.sre_agent.project_id : var.existing_gke_project_id
+  gke_cluster_location  = var.create_gke_cluster ? var.region : var.existing_gke_location
   gke_cluster_namespace = var.create_gke_cluster ? "test-incidents" : var.existing_gke_namespace
+  # "--region" for regional clusters (default); "--zone" only when existing_gke_location_type = "zone"
+  gke_location_flag = (var.create_gke_cluster || var.existing_gke_location_type == "region") ? "--region" : "--zone"
 }
 
 # Read back cluster CA cert and endpoint — used by the Cloud Run MCP server.

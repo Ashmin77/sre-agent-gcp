@@ -84,9 +84,7 @@ output "gke_namespace" {
 
 output "gke_connect_command" {
   description = "Run this command to configure kubectl for the cluster."
-  value = (var.create_gke_cluster || var.existing_gke_location_type == "region") ?
-    "gcloud container clusters get-credentials ${local.gke_cluster_name} --region ${local.gke_cluster_location} --project ${local.gke_cluster_project}" :
-    "gcloud container clusters get-credentials ${local.gke_cluster_name} --zone ${local.gke_cluster_location} --project ${local.gke_cluster_project}"
+  value       = "gcloud container clusters get-credentials ${local.gke_cluster_name} ${local.gke_location_flag} ${local.gke_cluster_location} --project ${local.gke_cluster_project}"
 }
 
 # ── MCP SERVER ───────────────────────────────────────────────────
