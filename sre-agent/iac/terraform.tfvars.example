@@ -1,0 +1,33 @@
+# =============================================================================
+# terraform.tfvars — THE ONLY FILE YOU NEED TO EDIT BEFORE DEPLOYING.
+#
+# Steps:
+#   1. Copy this file:  cp iac/terraform.tfvars.example iac/terraform.tfvars
+#   2. Fill in the two required values below (project_id + billing_account).
+#   3. Run:             terraform -chdir=iac init && terraform -chdir=iac apply
+#   4. Run:             bash scripts/init-env.sh
+#      (generates agent/.env from terraform outputs automatically)
+#
+# Everything else — MCP URLs, bucket names, service account emails — is derived
+# from these values by Terraform and written to agent/.env by init-env.sh.
+# =============================================================================
+
+# ── REQUIRED ─────────────────────────────────────────────────────
+
+# Your GCP project ID. Must be globally unique.
+# Rules: 6-30 chars, lowercase letters/digits/hyphens, start with a letter.
+# Example: "my-sre-agent-prod"
+project_id = "YOUR_GCP_PROJECT_ID"
+
+# Your GCP billing account ID.
+# Find it with: gcloud billing accounts list
+# Format: XXXXXX-XXXXXX-XXXXXX (uppercase hex)
+billing_account = "XXXXXX-XXXXXX-XXXXXX"
+
+# ── OPTIONAL — defaults are fine for most deployments ────────────
+
+# GCP region for all resources (GKE, Cloud Run, GCS, Cloud NAT).
+region = "us-central1"
+
+# GCP zone — must be within the region above.
+zone = "us-central1-a"
